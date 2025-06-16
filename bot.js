@@ -1,47 +1,50 @@
 require('dotenv').config();
-// const HF_MODEL = 'HuggingFaceH4/zephyr-7b-beta'; // you can change model
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const express = require('express');
 
+// Keep-alive server
+const app = express();
+app.get('/', (_, res) => res.send('🤖 DeepSeek R1 bot is live'));
+app.listen(process.env.PORT || 3000, () => {
+  console.log('✅ Express server running...');
+});
+
+// Load credentials
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const HF_TOKEN = process.env.HF_TOKEN;
-const HF_MODEL = process.env.HF_MODEL;
+const OR_TOKEN = process.env.HF_TOKEN;
+const OR_MODEL = process.env.HF_MODEL;
 
-
-// Create bot
+// Start bot
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
-// Handle messages
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userInput = msg.text;
 
-  // Trim user input to avoid delays
-  // const trimmedInput = userInput.slice(0, 200);
-
-  // Send thinking message
-  await bot.sendMessage(chatId, '🤖 Thinking... please wait a moment');
+  await bot.sendMessage(chatId, '🤖 DeepSeek is thinking...');
 
   try {
-    // Hugging Face API call
     const response = await axios.post(
-      `https://api-inference.huggingface.co/models/${HF_MODEL}`,
-      { inputs: trimmedInput },
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model: OR_MODEL,
+        messages: [{ role: 'user', content: userInput }],
+      },
       {
         headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
+          Authorization: `Bearer ${OR_TOKEN}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://yourdomain.com',
+          'X-Title': 'TelegramDeepSeekBot',
         },
       }
     );
 
-    const botReply =
-      response.data?.[0]?.generated_text || '🤖 Sorry, I could not generate a response.';
-
-    // Send response back to Telegram
-    bot.sendMessage(chatId, botReply);
-
+    const reply = response.data.choices?.[0]?.message?.content?.trim() || '⚠️ No reply from DeepSeek.';
+    await bot.sendMessage(chatId, reply);
   } catch (error) {
-    console.error(error?.response?.data || error.message);
-    bot.sendMessage(chatId, '❌ Error fetching response from Hugging Face.');
+    console.error('❌ API Error:', error?.response?.data || error.message);
+    await bot.sendMessage(chatId, '❌ Failed to get response from DeepSeek.');
   }
 });
